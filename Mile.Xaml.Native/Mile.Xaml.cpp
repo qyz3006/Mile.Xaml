@@ -22,6 +22,7 @@
 #endif
 
 #include <WinUser.h>
+#include <VersionHelpers.h>   // IsWindows11OrGreater() for Win10 Mica crash fix
 
 // To enable support for non-WinRT interfaces, unknwn.h must be included before
 // any C++/WinRT headers.
@@ -224,9 +225,23 @@ EXTERN_C LRESULT CALLBACK MileXamlContentWindowDefaultCallback(
         // Focus on XAML Island host window for Acrylic brush support.
         ::SetFocus(XamlWindowHandle);
 
-        ::MileSetWindowSystemBackdropTypeAttribute(
-            hWnd,
-            MILE_WINDOW_SYSTEM_BACKDROP_TYPE_MICA);
+        // WIN10 CRASH FIX (NanaZip issue #400 family):
+        // Mica (MILE_WINDOW_SYSTEM_BACKDROP_TYPE_MICA) is Windows 11 only.
+        // On Windows 10 the framework-internal Mica path is undefined and
+        // corrupts the stack, causing a silent __fastfail 0xC0000409 exit.
+        // Guard it behind IsWindows11OrGreater() and fall back to NONE on Win10.
+        if (IsWindows11OrGreater())
+        {
+            ::MileSetWindowSystemBackdropTypeAttribute(
+                hWnd,
+                MILE_WINDOW_SYSTEM_BACKDROP_TYPE_MICA);
+        }
+        else
+        {
+            ::MileSetWindowSystemBackdropTypeAttribute(
+                hWnd,
+                MILE_WINDOW_SYSTEM_BACKDROP_TYPE_NONE);
+        }
 
         if (FAILED(::MileXamlSetXamlContentForContentWindow(
             hWnd,
