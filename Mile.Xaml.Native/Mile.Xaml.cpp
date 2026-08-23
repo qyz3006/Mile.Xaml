@@ -22,7 +22,7 @@
 #endif
 
 #include <WinUser.h>
-#include <VersionHelpers.h>   // IsWindows11OrGreater() for Win10 Mica crash fix
+#include <winver.h>   // VerSetConditionMask / VerifyVersionInfoW (Win10 Mica crash fix)
 
 // To enable support for non-WinRT interfaces, unknwn.h must be included before
 // any C++/WinRT headers.
@@ -229,8 +229,38 @@ EXTERN_C LRESULT CALLBACK MileXamlContentWindowDefaultCallback(
         // Mica (MILE_WINDOW_SYSTEM_BACKDROP_TYPE_MICA) is Windows 11 only.
         // On Windows 10 the framework-internal Mica path is undefined and
         // corrupts the stack, causing a silent __fastfail 0xC0000409 exit.
-        // Guard it behind IsWindows11OrGreater() and fall back to NONE on Win10.
-        if (IsWindows11OrGreater())
+        // Guard it behind a Win11 check and fall back to NONE on Win10.
+        //
+        // NOTE: We intentionally avoid VersionHelpers.h's IsWindows11OrGreater()
+        // because that inline is gated by _WIN32_WINNT and is compiled out when
+        // the consuming project (NanaZip) targets a lower Windows version, which
+        // caused error C3861 ("identifier not found") on the first build attempt.
+        // Instead we probe via VerifyVersionInfoW (available on all Win10 SDKs,
+        // not gated by _WIN32_WINNT). Querying ">= 10.0.22000" via
+        // VER_GREATER_EQUAL is not subject to Microsoft's GetVersionEx
+        // app-compat shimming, so it reliably distinguishes Win11 (build >=
+        // 22000) from Win10 (19041/19045).
+        BOOL IsWin11 = FALSE;
+        {
+            OSVERSIONINFOEXW osvi = { sizeof(osvi) };
+            osvi.dwMajorVersion = 10;
+            osvi.dwMinorVersion = 0;
+            osvi.dwBuildNumber = 22000; // Windows 11 build threshold
+            DWORDLONG cond = VerSetConditionMask(
+                VerSetConditionMask(
+                    VerSetConditionMask(
+                        0, VER_MAJORVERSION, VER_GREATER_EQUAL),
+                    VER_MINORVERSION, VER_GREATER_EQUAL),
+                VER_BUILDNUMBER, VER_GREATER_EQUAL);
+            if (VerifyVersionInfoW(
+                    &osvi,
+                    VER_MAJORVERSION | VER_MINORVERSION | VER_BUILDNUMBER,
+                    cond))
+            {
+                IsWin11 = TRUE;
+            }
+        }
+        if (IsWin11)
         {
             ::MileSetWindowSystemBackdropTypeAttribute(
                 hWnd,
