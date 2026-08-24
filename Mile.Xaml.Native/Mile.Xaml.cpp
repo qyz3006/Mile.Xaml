@@ -581,7 +581,31 @@ EXTERN_C HRESULT WINAPI MileXamlThreadInitialize()
         g_WindowsXamlManager =
             winrt::WindowsXamlManager::InitializeForCurrentThread();
 
-        winrt::check_hresult(::MileXamlSetTransparentBackgroundAttribute(TRUE));
+        // WIN10 WHITE-SCREEN FIX:
+        // TransparentBackground is only meaningful when Mica is active
+        // (XAML content transparent, Mica provides the backdrop). On Win10
+        // without Mica, transparent background causes DWM to fill the window
+        // with white. Only set it on Win11.
+        {
+            OSVERSIONINFOEXW osvi = { sizeof(osvi) };
+            osvi.dwMajorVersion = 10;
+            osvi.dwMinorVersion = 0;
+            osvi.dwBuildNumber = 22000;
+            DWORDLONG cond = VerSetConditionMask(
+                VerSetConditionMask(
+                    VerSetConditionMask(
+                        0, VER_MAJORVERSION, VER_GREATER_EQUAL),
+                    VER_MINORVERSION, VER_GREATER_EQUAL),
+                VER_BUILDNUMBER, VER_GREATER_EQUAL);
+            if (VerifyVersionInfoW(
+                &osvi,
+                VER_MAJORVERSION | VER_MINORVERSION | VER_BUILDNUMBER,
+                cond))
+            {
+                winrt::check_hresult(
+                    ::MileXamlSetTransparentBackgroundAttribute(TRUE));
+            }
+        }
 
         // Prevent showing the dummy/empty/ghost DesktopWindowXamlSource window
         // in the task bar.
