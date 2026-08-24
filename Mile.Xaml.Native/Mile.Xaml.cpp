@@ -336,11 +336,17 @@ EXTERN_C LRESULT CALLBACK MileXamlContentWindowDefaultCallback(
         // ContentDialogs don't resize themselves when the XAML island
         // resizes. However, if we manually resize our CoreWindow, that'll
         // actually trigger a resize of the ContentDialog.
-        ::PostMessageW(
-            ::MileXamlGetCoreWindowHandle(),
-            uMsg,
-            wParam,
-            lParam);
+        // WIN10 RUNTIME CRASH FIX: Validate CoreWindow handle before
+        // posting, as the CoreWindow can become invalid on Win10.
+        HWND CoreWindowHandle = ::MileXamlGetCoreWindowHandle();
+        if (CoreWindowHandle && ::IsWindow(CoreWindowHandle))
+        {
+            ::PostMessageW(
+                CoreWindowHandle,
+                uMsg,
+                wParam,
+                lParam);
+        }
 
         break;
     }
@@ -420,15 +426,20 @@ EXTERN_C LRESULT CALLBACK MileXamlContentWindowDefaultCallback(
                 if (Content &&
                     winrt::VisualTreeHelper::GetParent(Content))
                 {
-                    // Forward WM_SETTINGCHANGE to CoreWindow compatibility
-                    // window for improve the runtime light and dark mode
-                    // switch support for XAML Islands. (Noticed by
-                    // dongle-the-gadget.)
-                    ::SendMessageW(
-                        ::MileXamlGetCoreWindowHandle(),
-                        uMsg,
-                        wParam,
-                        lParam);
+        // WIN10 RUNTIME CRASH FIX (NanaZip issue #400 family):
+        // Windows 10 broadcasts WM_SETTINGCHANGE("ImmersiveColorSet") every
+        // ~10-15 s. Forwarding this synchronously to the CoreWindow compat
+        // window can deadlock or AV because Win10 CoreWindow message pump is
+        // less robust. Validate the handle before sending.
+        HWND CoreWindowHandle = ::MileXamlGetCoreWindowHandle();
+        if (CoreWindowHandle && ::IsWindow(CoreWindowHandle))
+        {
+            ::SendMessageW(
+                CoreWindowHandle,
+                uMsg,
+                wParam,
+                lParam);
+        }
 
                     BOOL UseImmersiveDarkMode = (
                         Content.ActualTheme() == winrt::ElementTheme::Dark
