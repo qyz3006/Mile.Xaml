@@ -671,7 +671,15 @@ EXTERN_C HRESULT WINAPI MileXamlGlobalInitialize()
     WindowClass.hIconSm = nullptr;
     if (!::RegisterClassExW(&WindowClass))
     {
-        return HRESULT_FROM_WIN32(::GetLastError());
+        DWORD LastError = ::GetLastError();
+        if (LastError != ERROR_CLASS_ALREADY_EXISTS)
+        {
+            return HRESULT_FROM_WIN32(LastError);
+        }
+        // Class already registered (MileXamlGlobalInitialize called twice).
+        // Continue with initialization - this is expected when App::App()
+        // calls MileXamlGlobalInitialize() after K7ModernInitialize()
+        // already called it.
     }
 
     ::MileXamlSetPreferredDarkModeAttribute(TRUE);
